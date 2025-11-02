@@ -1,0 +1,47 @@
+# Cursor Rules for AI Video Generator Project
+
+## Prompt Generation Rules
+
+### NEVER Reference Existing Media
+- ❌ NEVER mention movie titles (Spider-Verse, Matrix, Blade Runner, etc.)
+- ❌ NEVER mention character names (Spider-Man, Neo, etc.)
+- ❌ NEVER mention franchise names (Marvel, DC, Star Wars, etc.)
+- ❌ NEVER use "X-inspired" or "X-style" referencing media
+
+### Instead: Describe Visual Style Directly
+- ✅ Use technical art terms: "hybrid 2D/3D animation", "cel-shaded", "comic book aesthetics"
+- ✅ Describe specific visual effects: "bold dynamic outlines", "halftone patterns", "chromatic aberration"
+- ✅ Describe animation techniques: "varied frame timing", "motion blur trails", "speed lines"
+
+## Image Generation Prompts
+
+### Style Keywords to Use
+- Animation: hybrid 2D/3D, hand-drawn details, cel-shaded, painterly brush strokes
+- Visual Effects: Ben-Day dots, halftone patterns, chromatic aberration, motion blur, speed lines
+- Aesthetic: bold dynamic outlines, varying line weights, imperfect hand-drawn edges, intentional imperfections
+- Post-processing: film grain texture, pop art influences, high contrast vibrant colors
+
+### NEVER Include
+- Movie/show references
+- Character costume descriptions from media
+- Franchise-specific terminology
+
+## Setting: Slavic Steampunk Post-Apocalyptic
+
+### Core Elements
+- **Slavic:** Traditional patterns, folk motifs, Orthodox architecture elements, Cyrillic aesthetics
+- **Steampunk:** Brass mechanisms, copper pipes, steam vents, clockwork, Victorian-era tech, coal-powered
+- **Post-Apocalyptic:** Ruins, weathered surfaces, nature reclaiming technology, makeshift repairs
+
+### Visual Vocabulary
+- Materials: brass, copper, bronze, worn leather, aged wood, tarnished metal
+- Tech: clockwork mechanisms, steam-powered, gear-driven, pneumatic systems, analog dials
+- Architecture: Orthodox onion domes with brass plating, steam-pipe spires, mechanical bell towers
+- Energy: steam clouds, pressure valves releasing, coal ember glow, mechanical sparks
+- Clothing: Victorian-era base with Slavic embroidery, brass goggles, leather straps, gear accessories
+
+## Testing & Development
+- Use `uv` for all Python operations
+- Never disable git hooks or use `--no-verify`
+- Write tests before fixing defects
+- Maintain 80%+ test coverage
