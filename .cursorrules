@@ -1,47 +1,22 @@
-# Cursor Rules for AI Video Generator Project
-
-## Prompt Generation Rules
-
-### NEVER Reference Existing Media
-- ❌ NEVER mention movie titles (Spider-Verse, Matrix, Blade Runner, etc.)
-- ❌ NEVER mention character names (Spider-Man, Neo, etc.)
-- ❌ NEVER mention franchise names (Marvel, DC, Star Wars, etc.)
-- ❌ NEVER use "X-inspired" or "X-style" referencing media
-
-### Instead: Describe Visual Style Directly
-- ✅ Use technical art terms: "hybrid 2D/3D animation", "cel-shaded", "comic book aesthetics"
-- ✅ Describe specific visual effects: "bold dynamic outlines", "halftone patterns", "chromatic aberration"
-- ✅ Describe animation techniques: "varied frame timing", "motion blur trails", "speed lines"
-
-## Image Generation Prompts
-
-### Style Keywords to Use
-- Animation: hybrid 2D/3D, hand-drawn details, cel-shaded, painterly brush strokes
-- Visual Effects: Ben-Day dots, halftone patterns, chromatic aberration, motion blur, speed lines
-- Aesthetic: bold dynamic outlines, varying line weights, imperfect hand-drawn edges, intentional imperfections
-- Post-processing: film grain texture, pop art influences, high contrast vibrant colors
-
-### NEVER Include
-- Movie/show references
-- Character costume descriptions from media
-- Franchise-specific terminology
-
-## Setting: Slavic Steampunk Post-Apocalyptic
-
-### Core Elements
-- **Slavic:** Traditional patterns, folk motifs, Orthodox architecture elements, Cyrillic aesthetics
-- **Steampunk:** Brass mechanisms, copper pipes, steam vents, clockwork, Victorian-era tech, coal-powered
-- **Post-Apocalyptic:** Ruins, weathered surfaces, nature reclaiming technology, makeshift repairs
-
-### Visual Vocabulary
-- Materials: brass, copper, bronze, worn leather, aged wood, tarnished metal
-- Tech: clockwork mechanisms, steam-powered, gear-driven, pneumatic systems, analog dials
-- Architecture: Orthodox onion domes with brass plating, steam-pipe spires, mechanical bell towers
-- Energy: steam clouds, pressure valves releasing, coal ember glow, mechanical sparks
-- Clothing: Victorian-era base with Slavic embroidery, brass goggles, leather straps, gear accessories
-
-## Testing & Development
-- Use `uv` for all Python operations
-- Never disable git hooks or use `--no-verify`
-- Write tests before fixing defects
-- Maintain 80%+ test coverage
+Keep all documents super short and lean.
+the only types of documentation should exist are:
+- requirements.md with use cases and acceptance tests but without solution details. should decribe problem we're solving. target audience: architect and developers
+- solution_design.md describing the solution for the requirements. should contain list of technologies to be used, all of them must be latest modern best practices. should contain project structure, examples of how the might will be used/called (list of endpoints for apis, or example command line calls for scripts etc) target audience: developers
+- readme.md describing how to run and how to use the solution. target audience: devops and/or end users.
+use uv for python dependencies management
+at least 80% of code must be covered with tests
+follow agile delivery approach: plan work in small tangible milestones, once development for one milestone is finished cover it with tests and run the tests to ensure code works as expected and only after that proceed to work on next milestone
+maintain 2 test suits:
+- unit tests to test specific functions or modules
+- integration tests to test the whole app/script and only external dependencies are mocked
+when you found a defect or user reports a defect first thing you need to do is to understand if that's environment issue or solution issue. if that's solution issue fix it using TDD approach: create a test to reproduce the bug and then fix it
+never delete 'develop' branch during merge
+never use no-verify flag on git commit command
+never disable pre-commit hooks
+pre-commit hooks must run all the tests and fail if any test fails
+before fixing a defect write a auto-test to reproduce it and only after that proceed with the fix
+before refactoring of any module cover that module with tests ensure at least 80% of coverage
+after implementing a new requirement or user story write tests for it
+in tests do not mock cosmos db, blob storage and sqs, I have local emulators for them
+after a commit push to develop, watch github actions until succesful completion.
+always check terminal logs after I"m cancelling a command to understand what has happened

@@ -1,0 +1,3 @@
+[console_scripts]
+image-cli = app.image_cli:app
+video-cli = app.cli:app
