@@ -1,220 +1,211 @@
-# AI Video & Image Generator
+# AI Image & Video Generator CLI
 
-Two powerful CLI tools:
+Command-line tools for AI-powered image generation, editing, and video creation.
 
-1. **Video CLI** - Generate short transition videos between ordered images using a pluggable provider abstraction. Default provider `veo` uses **Google Veo 3.1-fast-generate-preview** for image-to-video transitions **(8 seconds per video, duration not configurable)**. Images generated with **Gemini 2.5 Flash Image** for **Slavic Steampunk post-apocalyptic** visuals.
+## Quick Install
 
-2. **Image CLI** - Standalone tool for AI-powered image generation, refinement, and upscaling. Can be used independently or to prepare images for video generation.
-
-**⚠️ Important:** Veo 3.1 generates 8-second videos by default. The `--duration` parameter is passed to the API but currently ignored by Google.
-
-## Quickstart
-
-### Video Generation
-
-1) **Set up environment:**
 ```bash
-uv venv
+# Clone and install
+git clone <repository-url>
+cd shit_factory_ai_video_generator
 uv pip install -e .
-video-cli --help
+
+# Set up API key
+echo "GOOGLE_API_KEY=your-key" > .env
 ```
 
-2) **Generate everything (images + videos):**
+Get your API key: https://aistudio.google.com/apikey
+
+## Image CLI Commands
+
+### Generate Image
 ```bash
-# With installed CLI (recommended)
-video-cli
-
-# Or with uv run
-uv run python -m app.cli
-
-# Or directly with Python
-python -m app.cli
+uv run image-cli generate "your prompt" --output image.png
 ```
 
-That's it! By default:
-- Looks for `./.src/video_prompts.json` (auto-generates images)
-- Generates videos from image transitions
-- Outputs to `./.out/`
-
-3) **Test with first N videos:**
+### Refine Image (AI-powered editing)
 ```bash
-uv run python -m app.cli --limit 3
+uv run image-cli refine input.png "make it brighter" --output refined.png
 ```
 
-4) **See detailed debug logs:**
+### Crop Image (for different aspect ratios)
 ```bash
-uv run python -m app.cli --verbose
+# Smart crop to aspect ratio
+uv run image-cli crop input.png --aspect 9:16 --output vertical.png
+uv run image-cli crop input.png --aspect 16:9 --output horizontal.png
+
+# Manual crop with coordinates
+uv run image-cli crop input.png --x 100 --y 200 --width 1080 --height 1920 --output custom.png
 ```
 
-5) **Dry run (preview without generating):**
+### Upscale Image
 ```bash
-uv run python -m app.cli --dry-run
+uv run image-cli upscale input.png --size 3000x3000 --output large.png
 ```
 
-6) **Only generate images (skip videos):**
+## Common Workflows
+
+### Workflow 1: Generate → Crop Multiple Formats
 ```bash
-uv run python -m app.cli --images-only
+# Generate large square image
+uv run image-cli generate "cinematic portrait, centered composition" --output base.png --size 1536x1536
+
+# Crop for different platforms
+uv run image-cli crop base.png --aspect 9:16 --output vertical.png    # Instagram/TikTok
+uv run image-cli crop base.png --aspect 16:9 --output horizontal.png  # YouTube
+uv run image-cli crop base.png --aspect 1:1 --output square.png       # Instagram post
 ```
 
-7) **Only generate videos from existing images:**
+### Workflow 2: Generate → Refine → Upscale
 ```bash
-uv run python -m app.cli --prompts ""
-# Empty prompts means: use existing images in ./.src/
+# Generate base
+uv run image-cli generate "your prompt" --output step1.png
+
+# Refine with AI
+uv run image-cli refine step1.png "add more details" --output step2.png
+
+# Upscale to high resolution
+uv run image-cli upscale step2.png --size 3000x3000 --output final.png
 ```
 
-### Advanced Options
+## Video CLI (Image-to-Video)
 
-- **Custom prompts file:**
+Generate transition videos from image sequences:
+
 ```bash
-uv run python -m app.cli --prompts path/to/prompts.json
+# Generate videos from images in .src folder
+uv run python -m app.cli --src ./.src --duration 5
+
+# With custom prompts
+uv run python -m app.cli --prompts ./.src/video_prompts.json
 ```
 
-- **Change image provider:**
+See [video_generation_guide.md](video_generation_guide.md) for details.
+
+## Image Providers
+
+Switch between AI providers with `--provider`:
+
 ```bash
-uv run python -m app.cli --img-provider google   # Vertex Imagen
-uv run python -m app.cli --img-provider openai   # DALL-E
-# Default: gemini (Gemini 2.5 Flash)
+# Gemini (default, fastest)
+uv run image-cli generate "prompt" --provider gemini
+
+# Google Imagen 3.0 (supports aspect ratios: 9:16, 16:9, 3:4, 4:3, 1:1)
+uv run image-cli generate "prompt" --provider google --size 768x1408
+
+# OpenAI (DALL-E)
+uv run image-cli generate "prompt" --provider openai
 ```
 
-- **Force regenerate all images:**
+**Supported aspect ratios (Google Imagen 3.0):**
+- `768x1408` (9:16) - vertical for stories/shorts
+- `1408x768` (16:9) - horizontal for YouTube
+- `896x1280` (3:4) - portrait
+- `1280x896` (4:3) - landscape
+- `1024x1024` (1:1) - square
+
+## Installation Options
+
+### Option 1: Use with `uv run` (recommended)
 ```bash
-uv run python -m app.cli --force-regen
+uv run image-cli generate "prompt"
 ```
 
-- **Merge generated + existing images:**
+### Option 2: Add to PATH (Windows)
 ```bash
-uv run python -m app.cli --pair-source all
+# One-time setup
+setx PATH "%PATH%;C:\path\to\project\.venv\Scripts"
+
+# Then use directly
+image-cli generate "prompt"
 ```
 
-- **Image size and model:** controlled via `.env` (see below)
-- **Grouped image generation:** prompts can include `group` field for sequential dependencies within groups, concurrent across groups (flag: `--img-concurrency`)
-
-### Provider credentials
-
-#### Google Veo 3 (default video provider)
-- `veo` uses Google Veo 3 via the Gemini API for video generation
-- Requires `GOOGLE_API_KEY` in `.env`:
-```
-# Get your API key from https://aistudio.google.com/apikey
-GOOGLE_API_KEY=your_api_key_here
-# Optional: specify Veo model (default: veo-3.0-generate-preview)
-VEO_MODEL=veo-3.0-generate-preview
-```
-- **Note**: Veo 3 is priced at $0.75 per second of video generated
-- Videos are generated asynchronously; the system polls until completion (timeout: 60 minutes)
-
-#### OpenAI Images (alternative image provider)
-```
-OPENAI_API_KEY=...
-# Model options (cheapest to most expensive):
-# gpt-image-1-mini (default, ~80% cheaper, ideal for dev)
-# dall-e-2, dall-e-3, gpt-image-1 (highest quality for prod)
-OPENAI_IMAGE_MODEL=gpt-image-1-mini
-# Image size: 1024x1024 (square) | 1024x1536 (portrait) | 1536x1024 (landscape) | auto
-# Note: Smaller sizes not supported; use gpt-image-1-mini for cost savings instead
-OPENAI_IMAGE_SIZE=1024x1024
+### Option 3: Create batch wrapper
+```cmd
+echo @echo off > C:\Windows\image-cli.bat
+echo C:\path\to\.venv\Scripts\image-cli.exe %%* >> C:\Windows\image-cli.bat
 ```
 
-#### Google Gemini 2.5 Flash Image (default image provider)
-- **Simpler setup:** Just API key, no gcloud/ADC needed!
-- **Get API key:** https://aistudio.google.com/apikey
-- Set in `.env`:
-```
-GOOGLE_API_KEY=your-api-key-here
-GEMINI_IMAGE_MODEL=gemini-2.5-flash-image  # optional, this is default
-```
-- **Features:**
-  - ✅ Multi-image fusion
-  - ✅ Better character/style consistency with reference images
-  - ✅ Conversational editing support
-  - ✅ Simpler authentication (just API key)
-  - ✅ No gcloud CLI or ADC setup required
+## Environment Variables
 
-#### Google Vertex Imagen 2/3 (alternative image provider)
-- **To use:** `--img-provider google`
-- Requires Application Default Credentials (ADC):
-  - User credentials: `gcloud auth application-default login`
-  - Or service account: Set `GOOGLE_APPLICATION_CREDENTIALS=path/to/key.json`
-- Set in `.env`:
-```
+Create `.env` file:
+```bash
+# Required for image generation
+GOOGLE_API_KEY=your-google-api-key
+
+# Optional: OpenAI
+OPENAI_API_KEY=your-openai-key
+
+# Optional: Google Cloud (for Vertex AI)
 GOOGLE_CLOUD_PROJECT=your-project-id
 VERTEX_LOCATION=us-central1
 VERTEX_IMAGEN_MODEL=imagen-3.0-generate-001
-# Optional if using service account:
-# GOOGLE_APPLICATION_CREDENTIALS=C:\path\to\service-account-key.json
-```
-- Enable Vertex AI API: `gcloud services enable aiplatform.googleapis.com --project YOUR_PROJECT_ID`
-- Default model is `imagen-3.0-generate-001` (Imagen 3.0). Other options: `imagegeneration@006` (Imagen 2).
-- Used for text-to-image and edit mode (when `attachment` is provided).
-- In unit tests, the provider is mocked and does not call external services.
-
-### GCS Bucket Management (Video Generation)
-
-**Required for Veo video generation:**
-```env
-# Create a GCS bucket first
-VERTEX_VEO_OUTPUT_BUCKET=gs://your-bucket-name/videos/
-VERTEX_VEO_MODEL=veo-2.0-generate-001  # or veo-3.1-fast-generate-preview
 ```
 
-**Create GCS bucket with auto-cleanup:**
+## Quick Reference
 
-**Option 1: Use helper script (recommended)**
+| Command | Description |
+|---------|-------------|
+| `generate` | Create image from text prompt |
+| `refine` | Modify image with AI |
+| `crop` | Cut image to size/aspect ratio |
+| `upscale` | Increase resolution |
+| `--output` / `-o` | Specify output path |
+| `--provider` / `-p` | Choose AI provider |
+| `--size` / `-s` | Set image size |
+| `--aspect` / `-a` | Crop to aspect ratio |
+| `--verbose` / `-v` | Show detailed logs |
+
+## Social Media Sizes
+
+**Instagram/TikTok/Shorts:** 1080x1920 (9:16)
 ```bash
-# Linux/Mac
-./scripts/setup_gcs_lifecycle.sh YOUR_PROJECT_ID your-unique-bucket-name
-
-# Windows PowerShell
-.\scripts\setup_gcs_lifecycle.ps1 YOUR_PROJECT_ID your-unique-bucket-name
+uv run image-cli crop image.png --aspect 9:16 --output vertical.png
+uv run image-cli upscale vertical.png --size 1080x1920 --output ig.png
 ```
 
-**Option 2: Manual setup**
+**YouTube/Horizontal:** 1920x1080 (16:9)
 ```bash
-# Create bucket
-gsutil mb -p YOUR_PROJECT_ID -l us-central1 gs://your-unique-bucket-name
-
-# Set lifecycle policy to auto-delete files after 7 days
-echo '{"lifecycle":{"rule":[{"action":{"type":"Delete"},"condition":{"age":7}}]}}' > lifecycle.json
-gsutil lifecycle set lifecycle.json gs://your-unique-bucket-name
+uv run image-cli crop image.png --aspect 16:9 --output horizontal.png
+uv run image-cli upscale horizontal.png --size 1920x1080 --output yt.png
 ```
 
-**Smart features:**
-- ✅ **Deterministic naming** - Videos named as `<output>_<model>.mp4` 
-- ✅ **Resume interrupted runs** - If generation completed but download failed, reuses existing GCS video
-- ✅ **No re-generation** - Same model + inputs = fetches from GCS instead of regenerating
-- ✅ **Auto-cleanup after download** - Deletes from GCS immediately after successful download
-- ✅ **Auto-cleanup for orphaned files** - GCS lifecycle policy deletes files older than 7 days (catches failures)
-- ℹ️ **Directory structure handling** - Vertex AI may create directory structures in GCS; download logic automatically handles both direct files and nested directories
+**Instagram Post:** 1080x1080 (1:1)
+```bash
+uv run image-cli crop image.png --aspect 1:1 --output square.png
+uv run image-cli upscale square.png --size 1080x1080 --output post.png
+```
 
-**Storage cost management:**
-- Videos are deleted from GCS immediately after download (primary cleanup)
-- GCS lifecycle policy auto-deletes any remaining files after 7 days (backup cleanup for failures)
-- Zero manual intervention needed!
-
-### Image Generation (Standalone)
-
-Use the image CLI for standalone image operations:
+## Help
 
 ```bash
-# Generate an image
-image-cli generate "a cat in a steampunk city" --output cat.png
+# General help
+uv run image-cli --help
 
-# Refine an image with AI
-image-cli refine cat.png "add brass goggles" --output cat_refined.png
-
-# Upscale to high resolution
-image-cli upscale cat.png --size 3000x3000 --output cat_hd.png
+# Command-specific help
+uv run image-cli generate --help
+uv run image-cli crop --help
+uv run image-cli upscale --help
 ```
 
-**See [IMAGE_CLI.md](IMAGE_CLI.md) for complete documentation and examples.**
+## Documentation
+
+- **[IMAGE_CLI.md](IMAGE_CLI.md)** - Complete image CLI guide with examples
+- **[INSTALL.md](INSTALL.md)** - Detailed installation instructions
+- **[INSTALL_WINDOWS.md](INSTALL_WINDOWS.md)** - Windows-specific setup
+- **[QUICK_START.md](QUICK_START.md)** - Get started in 3 steps
+- **[video_generation_guide.md](video_generation_guide.md)** - Video generation guide
 
 ## Testing
+
 ```bash
 uv run pytest -q
-
-# Run specific test file
-uv run pytest tests/test_image_cli.py -v
-
-# Run without coverage check
-uv run pytest tests/test_image_cli.py --no-cov
 ```
+
+## Project Info
+
+Built with:
+- **Image generation**: Google Gemini 2.5 Flash, Imagen 3.0, OpenAI DALL-E
+- **Video generation**: Google Veo 3
+- **CLI framework**: Typer
+- **Package manager**: uv

@@ -64,7 +64,8 @@ class GoogleImageProvider:
         out_dir.mkdir(parents=True, exist_ok=True)
         results: List[ImageGenResult] = []
 
-        # Parse size into aspect ratio string (e.g., "1024x1024" -> "1:1")
+        # Parse size into aspect ratio string
+        # Imagen 3.0 supported aspect ratios: 1:1, 3:4, 4:3, 9:16, 16:9
         if "x" in size.lower():
             parts = size.lower().split("x")
             width = int(parts[0])
@@ -72,10 +73,33 @@ class GoogleImageProvider:
         else:
             width = height = 1024
         
-        # Convert to simplified aspect ratio for Vertex AI (e.g., 1024:1024 -> 1:1)
-        from math import gcd
-        aspect_gcd = gcd(width, height)
-        aspect_ratio = f"{width // aspect_gcd}:{height // aspect_gcd}"
+        # Map dimensions to supported Imagen 3.0 aspect ratios
+        aspect_ratio_map = {
+            (1024, 1024): "1:1",
+            (896, 1280): "3:4",
+            (1280, 896): "4:3",
+            (768, 1408): "9:16",
+            (1408, 768): "16:9",
+        }
+        
+        aspect_ratio = aspect_ratio_map.get((width, height))
+        if not aspect_ratio:
+            # Fallback: try to match by ratio
+            from math import gcd
+            aspect_gcd = gcd(width, height)
+            calculated_ratio = f"{width // aspect_gcd}:{height // aspect_gcd}"
+            
+            # Check if calculated ratio matches supported ones
+            supported_ratios = {"1:1", "3:4", "4:3", "9:16", "16:9"}
+            if calculated_ratio in supported_ratios:
+                aspect_ratio = calculated_ratio
+            else:
+                logger.warning(
+                    "Unsupported aspect ratio %s (calculated: %s). Falling back to 1:1. "
+                    "Supported: 1:1 (1024x1024), 3:4 (896x1280), 4:3 (1280x896), 9:16 (768x1408), 16:9 (1408x768)",
+                    f"{width}x{height}", calculated_ratio
+                )
+                aspect_ratio = "1:1"
 
         for p in prompts:
             filename = p.target_filename or f"{p.index:03d}__{p.code}.png"

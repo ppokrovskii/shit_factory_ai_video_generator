@@ -181,6 +181,146 @@ def refine(
 
 
 @app.command()
+def crop(
+    image: str = typer.Argument(..., help="Input image path"),
+    output: Path = typer.Option("cropped.png", "--output", "-o", help="Output image path"),
+    aspect: Optional[str] = typer.Option(None, "--aspect", "-a", help="Target aspect ratio (e.g., 9:16, 16:9, 1:1)"),
+    x: Optional[int] = typer.Option(None, "--x", help="Crop starting X coordinate (left edge)"),
+    y: Optional[int] = typer.Option(None, "--y", help="Crop starting Y coordinate (top edge)"),
+    width: Optional[int] = typer.Option(None, "--width", "-w", help="Crop width in pixels"),
+    height: Optional[int] = typer.Option(None, "--height", "-h", help="Crop height in pixels"),
+    position: str = typer.Option("center", "--position", "-p", help="Crop position when using aspect ratio: center, top, bottom, left, right"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed logs"),
+):
+    """Crop an image to a specific size or aspect ratio.
+    
+    Two modes:
+    1. Aspect ratio mode: Automatically crops to aspect ratio from center (or specified position)
+    2. Manual mode: Crop from specific coordinates with exact dimensions
+    
+    Examples:
+        # Crop to 9:16 aspect ratio from center
+        image-cli crop image.png --aspect 9:16 --output vertical.png
+        
+        # Crop to 16:9 from top
+        image-cli crop image.png --aspect 16:9 --position top --output horizontal.png
+        
+        # Manual crop from specific coordinates
+        image-cli crop image.png --x 100 --y 200 --width 1080 --height 1920 --output custom.png
+        
+        # Generate large image first, then crop multiple versions
+        image-cli generate "prompt" --output large.png --size 1536x1536
+        image-cli crop large.png --aspect 9:16 --output vertical.png
+        image-cli crop large.png --aspect 16:9 --output horizontal.png
+    """
+    load_dotenv()
+    configure_logging(2 if verbose else 1)
+    
+    input_path = Path(image)
+    if not input_path.exists():
+        typer.echo(f"[ERROR] Input image not found: {input_path}", err=True)
+        raise typer.Exit(code=1)
+    
+    try:
+        from PIL import Image
+        
+        # Open image
+        img = Image.open(input_path)
+        original_width, original_height = img.size
+        
+        logger.info("Cropping %s (size: %dx%d)", input_path, original_width, original_height)
+        
+        # Mode 1: Aspect ratio based cropping
+        if aspect:
+            # Parse aspect ratio
+            try:
+                aspect_parts = aspect.split(':')
+                if len(aspect_parts) != 2:
+                    raise ValueError("Invalid aspect ratio format")
+                aspect_w = int(aspect_parts[0])
+                aspect_h = int(aspect_parts[1])
+            except (ValueError, IndexError):
+                typer.echo(f"[ERROR] Invalid aspect ratio: {aspect}. Use format like '9:16' or '16:9'", err=True)
+                raise typer.Exit(code=1)
+            
+            # Calculate crop dimensions to fit aspect ratio
+            target_ratio = aspect_w / aspect_h
+            current_ratio = original_width / original_height
+            
+            if current_ratio > target_ratio:
+                # Image is wider than target - crop width
+                crop_height = original_height
+                crop_width = int(crop_height * target_ratio)
+            else:
+                # Image is taller than target - crop height
+                crop_width = original_width
+                crop_height = int(crop_width / target_ratio)
+            
+            # Calculate crop position
+            if position == "center":
+                crop_x = (original_width - crop_width) // 2
+                crop_y = (original_height - crop_height) // 2
+            elif position == "top":
+                crop_x = (original_width - crop_width) // 2
+                crop_y = 0
+            elif position == "bottom":
+                crop_x = (original_width - crop_width) // 2
+                crop_y = original_height - crop_height
+            elif position == "left":
+                crop_x = 0
+                crop_y = (original_height - crop_height) // 2
+            elif position == "right":
+                crop_x = original_width - crop_width
+                crop_y = (original_height - crop_height) // 2
+            else:
+                typer.echo(f"[ERROR] Invalid position: {position}. Use: center, top, bottom, left, right", err=True)
+                raise typer.Exit(code=1)
+            
+            logger.info("Cropping to aspect ratio %s from position '%s': %dx%d at (%d,%d)",
+                       aspect, position, crop_width, crop_height, crop_x, crop_y)
+        
+        # Mode 2: Manual coordinate-based cropping
+        elif x is not None and y is not None and width is not None and height is not None:
+            crop_x = x
+            crop_y = y
+            crop_width = width
+            crop_height = height
+            
+            # Validate coordinates
+            if crop_x < 0 or crop_y < 0:
+                typer.echo("[ERROR] Crop coordinates cannot be negative", err=True)
+                raise typer.Exit(code=1)
+            
+            if crop_x + crop_width > original_width or crop_y + crop_height > original_height:
+                typer.echo(f"[ERROR] Crop region ({crop_x},{crop_y},{crop_width},{crop_height}) exceeds image bounds ({original_width}x{original_height})", err=True)
+                raise typer.Exit(code=1)
+            
+            logger.info("Manual crop: %dx%d at (%d,%d)", crop_width, crop_height, crop_x, crop_y)
+        
+        else:
+            typer.echo("[ERROR] Either specify --aspect OR all of (--x, --y, --width, --height)", err=True)
+            raise typer.Exit(code=1)
+        
+        # Perform crop
+        crop_box = (crop_x, crop_y, crop_x + crop_width, crop_y + crop_height)
+        cropped = img.crop(crop_box)
+        
+        # Save
+        output.parent.mkdir(parents=True, exist_ok=True)
+        cropped.save(output, optimize=True)
+        
+        typer.echo(f"[OK] Image cropped: {output}")
+        typer.echo(f"     Original: {original_width}x{original_height}")
+        typer.echo(f"     Cropped: {crop_width}x{crop_height}")
+        typer.echo(f"     Position: ({crop_x}, {crop_y})")
+        
+    except Exception as e:
+        logger.error("Cropping failed: %s", str(e))
+        typer.echo(f"[ERROR] Cropping failed: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def upscale(
     image: str = typer.Argument(..., help="Input image path"),
     output: Path = typer.Option("upscaled.png", "--output", "-o", help="Output image path"),
