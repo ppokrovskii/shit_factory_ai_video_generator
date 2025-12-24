@@ -38,10 +38,11 @@ logger = get_logger(__name__)
 
 @app.command()
 def generate(
-    prompt: str = typer.Argument(..., help="Text prompt for image generation"),
+    preset_or_prompt: str = typer.Argument(..., help="Preset (fast/regular/ultra) or text prompt"),
+    prompt: Optional[str] = typer.Argument(None, help="Text prompt (if preset specified)"),
     output: Path = typer.Option("output.png", "--output", "-o", help="Output image path"),
-    provider: str = typer.Option("gemini", "--provider", "-p", help="Image provider: gemini | openai | google"),
-    size: str = typer.Option("1024x1024", "--size", "-s", help="Image size (e.g., 1024x1024, 512x512)"),
+    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Override provider: gemini | gemini-pro | openai | google"),
+    size: Optional[str] = typer.Option(None, "--size", "-s", help="Override image size (e.g., 1024x1024, 2K, 4K)"),
     seed: Optional[int] = typer.Option(None, "--seed", help="Random seed for reproducibility"),
     negative: Optional[str] = typer.Option(None, "--negative", "-n", help="Negative prompt (what to avoid)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed debug logs"),
@@ -49,43 +50,81 @@ def generate(
     """Generate a new image from a text prompt.
     
     Examples:
-        # Basic generation
+        # Using presets (recommended)
+        image-cli generate fast "a cat"
+        image-cli generate "a cat"  # uses regular preset
+        image-cli generate ultra "a cat in 4K"
+        
+        # Override preset with specific provider
+        image-cli generate ultra "a cat" --provider openai
+        
+        # Legacy: direct prompt (uses regular preset)
         image-cli generate "a cat in a steampunk city"
         
         # With custom output path
-        image-cli generate "a cat" --output my_cat.png
+        image-cli generate fast "a cat" --output my_cat.png
         
         # With negative prompt
         image-cli generate "a cat" --negative "blurry, low quality"
-        
-        # Using specific provider and size
-        image-cli generate "a cat" --provider openai --size 512x512
     """
     load_dotenv()
     configure_logging(2 if verbose else 1)
     
     from .image_gen.base import ImagePrompt
+    from .preset_config import load_image_preset
+    
+    # Determine if first arg is a preset or a prompt
+    preset_names = ["fast", "regular", "ultra"]
+    if preset_or_prompt.lower() in preset_names:
+        # First arg is preset, second arg must be prompt
+        if prompt is None:
+            typer.echo("[ERROR] Prompt required after preset", err=True)
+            raise typer.Exit(code=1)
+        preset_name = preset_or_prompt.lower()
+        actual_prompt = prompt
+    else:
+        # First arg is the prompt, use default preset
+        preset_name = "regular"
+        actual_prompt = preset_or_prompt
+    
+    # Resolve configuration: explicit flags override preset
+    if provider:
+        # Explicit provider overrides preset
+        from .preset_config import get_default_model_for_provider
+        resolved_provider = provider
+        resolved_size = size or "1024x1024"
+        logger.info("Using explicit provider: %s (overrides preset)", provider)
+    else:
+        # Load preset configuration
+        try:
+            preset_config = load_image_preset(preset_name)
+            resolved_provider = preset_config.provider
+            resolved_size = size or preset_config.size
+            logger.info("Using preset: %s (provider=%s, size=%s)", preset_name, resolved_provider, resolved_size)
+        except ValueError as e:
+            typer.echo(f"[ERROR] {e}", err=True)
+            raise typer.Exit(code=1)
     
     # Create image prompt
     img_prompt = ImagePrompt(
         index=0,
         code="gen",
-        positive_prompt=prompt,
+        positive_prompt=actual_prompt,
         negative_prompt=negative,
         target_filename=output.name,
     )
     
     # Select provider
-    provider_instance = _get_image_provider(provider)
+    provider_instance = _get_image_provider(resolved_provider)
     
     # Generate image
-    logger.info("Generating image with prompt: %s", prompt[:100])
+    logger.info("Generating image with prompt: %s", actual_prompt[:100])
     output.parent.mkdir(parents=True, exist_ok=True)
     
     results = provider_instance.generate_images(
         [img_prompt],
         output.parent,
-        size=size,
+        size=resolved_size,
         seed=seed,
         skip_existing=False,
     )
@@ -103,8 +142,9 @@ def refine(
     image: str = typer.Argument(..., help="Input image path (or '-' to read from stdin)"),
     prompt: str = typer.Argument(..., help="Refinement prompt (e.g., 'make it more colorful')"),
     output: Path = typer.Option("refined.png", "--output", "-o", help="Output image path"),
-    provider: str = typer.Option("gemini", "--provider", "-p", help="Image provider: gemini | openai | google"),
-    size: str = typer.Option("1024x1024", "--size", "-s", help="Image size"),
+    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Override provider: gemini | gemini-pro | openai | google"),
+    preset: str = typer.Option("regular", "--preset", help="Quality preset: fast | regular | ultra"),
+    size: Optional[str] = typer.Option(None, "--size", "-s", help="Override image size"),
     seed: Optional[int] = typer.Option(None, "--seed", help="Random seed"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed logs"),
 ):
@@ -114,8 +154,11 @@ def refine(
     allowing you to modify or enhance existing images.
     
     Examples:
-        # Refine an image
+        # Refine an image with regular preset
         image-cli refine cat.png "make it more fluffy"
+        
+        # Use ultra preset for high quality
+        image-cli refine cat.png "add glasses" --preset ultra
         
         # With custom output
         image-cli refine cat.png "add glasses" --output cat_glasses.png
@@ -137,6 +180,22 @@ def refine(
         raise typer.Exit(code=1)
     
     from .image_gen.base import ImagePrompt
+    from .preset_config import load_image_preset
+    
+    # Resolve configuration: explicit flags override preset
+    if provider:
+        resolved_provider = provider
+        resolved_size = size or "1024x1024"
+        logger.info("Using explicit provider: %s (overrides preset)", provider)
+    else:
+        try:
+            preset_config = load_image_preset(preset)
+            resolved_provider = preset_config.provider
+            resolved_size = size or preset_config.size
+            logger.info("Using preset: %s (provider=%s, size=%s)", preset, resolved_provider, resolved_size)
+        except ValueError as e:
+            typer.echo(f"[ERROR] {e}", err=True)
+            raise typer.Exit(code=1)
     
     # Create refinement prompt with attachment
     img_prompt = ImagePrompt(
@@ -155,7 +214,7 @@ def refine(
         shutil.copy(input_path, temp_ref)
     
     # Select provider
-    provider_instance = _get_image_provider(provider)
+    provider_instance = _get_image_provider(resolved_provider)
     
     # Generate refined image
     logger.info("Refining image: %s with prompt: %s", input_path, prompt[:100])
@@ -163,7 +222,7 @@ def refine(
     results = provider_instance.generate_images(
         [img_prompt],
         output.parent,
-        size=size,
+        size=resolved_size,
         seed=seed,
         skip_existing=False,
     )
@@ -412,6 +471,9 @@ def _get_image_provider(provider_name: str):
     elif provider_name == "gemini":
         from .image_gen.gemini import GeminiImageProvider
         return GeminiImageProvider()
+    elif provider_name == "gemini-pro":
+        from .image_gen.gemini_pro import GeminiProImageProvider
+        return GeminiProImageProvider()
     else:
         typer.echo(f"[ERROR] Unknown provider: {provider_name}", err=True)
         raise typer.Exit(code=1)

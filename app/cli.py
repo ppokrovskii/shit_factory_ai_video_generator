@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -33,12 +34,14 @@ def main(
     prompts: Optional[Path] = typer.Option(None, "--prompts", help="Path to prompts JSON (default: ./.src/video_prompts.json if exists)"),
     src: Path = typer.Option(Path("./.src"), "--src", exists=True, file_okay=False, dir_okay=True, readable=True, help="Image source directory (default: ./.src)"),
     out: Path = typer.Option(Path("./.out"), "--out", help="Output directory for videos (default: ./.out)"),
-    provider: str = typer.Option("veo", "--provider", help="Video provider: veo (default) | mock (for testing)"),
+    provider: Optional[str] = typer.Option(None, "--provider", help="Override video provider: veo | mock"),
+    video_preset: str = typer.Option("regular", "--video-preset", help="Video quality preset: fast | regular | ultra"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview plan without generating"),
     verbose: bool = typer.Option(False, "--verbose", help="Show detailed debug logs"),
     limit: Optional[int] = typer.Option(None, "--limit", min=1, help="Generate only first N videos (for testing)"),
     # Image generation options
-    img_provider: str = typer.Option("gemini", "--img-provider", help="Image provider: gemini (default) | google | openai"),
+    img_provider: Optional[str] = typer.Option(None, "--img-provider", help="Override image provider: gemini | gemini-pro | google | openai"),
+    img_preset: str = typer.Option("regular", "--img-preset", help="Image quality preset: fast | regular | ultra"),
     img_concurrency: int = typer.Option(2, "--img-concurrency", min=1, help="Max concurrent image generation groups"),
     img_out: Path = typer.Option(Path("./.src"), "--img-out", help="Output directory for generated images (default: same as --src)"),
     pair_source: str = typer.Option("prompts-only", "--pair-source", help="Video pair source: prompts-only | existing | all"),
@@ -46,14 +49,11 @@ def main(
     force_regen: bool = typer.Option(False, "--force-regen", help="Regenerate images even if they exist"),
     images_only: bool = typer.Option(False, "--images-only", help="Generate only images, skip videos"),
     # Advanced/rare options (hidden from main help but still available)
-    duration: float = typer.Option(5.0, "--duration", min=0.1, hidden=True, help="Video duration in seconds (default: 5, rarely changed)"),
+    duration: Optional[float] = typer.Option(None, "--duration", min=0.1, hidden=True, help="Video duration in seconds (overrides preset)"),
 ):
     # Load environment variables from .env if present
     load_dotenv()
     
-    # Image size controlled via env: dev=256x256 for speed/cost, prod=1024x1024 for quality
-    import os
-    img_size = os.getenv("OPENAI_IMAGE_SIZE", "1024x1024")
     # verbose flag: False = level 1 (info), True = level 2 (debug)
     log_level = 2 if verbose else 1
     configure_logging(log_level)
@@ -71,11 +71,30 @@ def main(
     
     generated_images: list[Path] = []
     if img_gen:
+        # Resolve image provider configuration: explicit --img-provider overrides preset
+        from .preset_config import load_image_preset
+        
+        if img_provider:
+            # Explicit provider overrides preset
+            resolved_img_provider = img_provider
+            img_size = os.getenv("OPENAI_IMAGE_SIZE", "1024x1024")
+            logger.info("Using explicit image provider: %s (overrides preset)", img_provider)
+        else:
+            # Use preset configuration
+            try:
+                preset_config = load_image_preset(img_preset)
+                resolved_img_provider = preset_config.provider
+                img_size = preset_config.size
+                logger.info("Using image preset: %s (provider=%s, size=%s)", img_preset, resolved_img_provider, img_size)
+            except ValueError as e:
+                typer.echo(f"[ERROR] {e}", err=True)
+                raise typer.Exit(code=2)
+        
         # validate JSON and load prompts
         prompt_file = load_prompts(prompts)
         if dry_run:
             # Simulate generated images without external calls
-            typer.echo(f"Image generation enabled; provider={img_provider}; concurrency={img_concurrency}")
+            typer.echo(f"Image generation enabled; preset={img_preset}; provider={resolved_img_provider}; concurrency={img_concurrency}")
             simulated: list[Path] = []
             for clip in prompt_file.clips:
                 filename = clip.target_filename or f"{clip.index:03d}__{clip.code}.png"
@@ -83,17 +102,20 @@ def main(
             generated_images = simulated
         else:
             # choose provider (lazy import to avoid slow startup)
-            if img_provider == "openai":
+            if resolved_img_provider == "openai":
                 from .image_gen.openai import OpenAIImageProvider
                 iprov = OpenAIImageProvider()
-            elif img_provider == "google":
+            elif resolved_img_provider == "google":
                 from .image_gen.google import GoogleImageProvider
                 iprov = GoogleImageProvider()
-            elif img_provider == "gemini":
+            elif resolved_img_provider == "gemini":
                 from .image_gen.gemini import GeminiImageProvider
                 iprov = GeminiImageProvider()
+            elif resolved_img_provider == "gemini-pro":
+                from .image_gen.gemini_pro import GeminiProImageProvider
+                iprov = GeminiProImageProvider()
             else:
-                typer.echo(f"Unknown image provider: {img_provider}", err=True)
+                typer.echo(f"Unknown image provider: {resolved_img_provider}", err=True)
                 raise typer.Exit(code=2)
             # generate images with grouped scheduling: sequential within group, concurrent across groups
             skip_existing = not force_regen
@@ -175,15 +197,34 @@ def main(
         typer.echo("Dry-run requested; exiting without generating outputs")
         raise typer.Exit(code=0)
 
+    # Resolve video provider configuration: explicit --provider overrides preset
+    from .preset_config import load_video_preset
+    
+    if provider:
+        # Explicit provider overrides preset
+        resolved_provider = provider
+        resolved_duration = duration if duration is not None else 5.0
+        logger.info("Using explicit video provider: %s (overrides preset)", provider)
+    else:
+        # Use preset configuration
+        try:
+            video_preset_config = load_video_preset(video_preset)
+            resolved_provider = video_preset_config.provider
+            resolved_duration = duration if duration is not None else video_preset_config.duration
+            logger.info("Using video preset: %s (provider=%s, duration=%.1fs)", video_preset, resolved_provider, resolved_duration)
+        except ValueError as e:
+            typer.echo(f"[ERROR] {e}", err=True)
+            raise typer.Exit(code=2)
+
     # Lazy import video providers to avoid slow startup (VEOProvider imports google-cloud-sdk)
-    if provider == "veo":
+    if resolved_provider == "veo":
         from .providers.veo import VEOProvider
         prov = VEOProvider()
-    elif provider == "mock":
+    elif resolved_provider == "mock":
         from .providers.mock import MockVideoProvider
         prov = MockVideoProvider()
     else:
-        typer.echo(f"Unknown provider: {provider}", err=True)
+        typer.echo(f"Unknown provider: {resolved_provider}", err=True)
         raise typer.Exit(code=2)
 
     def provider_generate(a: Path, b: Path, dur: float, out_path: Path, video_prompt: str | None = None) -> None:
@@ -197,7 +238,7 @@ def main(
         pairs=legacy_pairs,
         out_dir=out,
         provider_generate=provider_generate,
-        duration_s=duration,
+        duration_s=resolved_duration,
         video_prompts=video_prompts_by_pair,
     )
 
@@ -207,9 +248,10 @@ def main(
         inputs=images,
         pairs=legacy_pairs,
         outputs=outputs,
-        provider=provider,
+        provider=resolved_provider,
         params={
-            "duration": duration,
+            "duration": resolved_duration,
+            "video_preset": video_preset if not provider else None,
             # no concurrency
         },
     )
