@@ -4,6 +4,16 @@ Completed changes. Newest at top.
 
 ---
 
+## [2024-12-24] [cleanup] Remove redundant documentation and files
+
+- Deleted 9 redundant markdown files (all info consolidated in README.md)
+- Removed duplicate docs (requirements.md, solution_design.md in root)
+- Removed outdated guides (INSTALL.md, QUICK_START.md, etc.)
+- Removed unused scripts directory (setup_gcs_lifecycle.sh/.ps1)
+- Removed test artifacts (test_input.png, test_output.png)
+- Removed unused main.py entry point
+- Result: Clean, minimal project structure with single source of truth
+
 ## [2024-12-24] [testing] Optimize test suite - remove slow integration tests
 
 - Reduced test execution time from 74s to 0.66s (112x faster)
