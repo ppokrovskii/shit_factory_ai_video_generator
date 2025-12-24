@@ -41,7 +41,7 @@ def generate(
     preset_or_prompt: str = typer.Argument(..., help="Preset (fast/regular/ultra) or text prompt"),
     prompt: Optional[str] = typer.Argument(None, help="Text prompt (if preset specified)"),
     output: Path = typer.Option("output.png", "--output", "-o", help="Output image path"),
-    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Override provider: gemini | gemini-pro | openai | google"),
+    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Override provider: gemini | gemini-pro | openai | google | imagen"),
     model: Optional[str] = typer.Option(None, "--model", "-m", help="Override model name (e.g., gpt-image-1-mini, dall-e-3, gemini-2.5-flash-image)"),
     size: Optional[str] = typer.Option(None, "--size", "-s", help="Override image size (e.g., 1024x1024, 2K, 4K)"),
     seed: Optional[int] = typer.Option(None, "--seed", help="Random seed for reproducibility"),
@@ -144,7 +144,7 @@ def refine(
     image: str = typer.Argument(..., help="Input image path (or '-' to read from stdin)"),
     prompt: str = typer.Argument(..., help="Refinement prompt (e.g., 'make it more colorful')"),
     output: Path = typer.Option("refined.png", "--output", "-o", help="Output image path"),
-    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Override provider: gemini | gemini-pro | openai | google"),
+    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Override provider: gemini | gemini-pro | openai | google | imagen"),
     model: Optional[str] = typer.Option(None, "--model", "-m", help="Override model name"),
     preset: str = typer.Option("fast", "--preset", help="Quality preset: fast | regular | ultra"),
     size: Optional[str] = typer.Option(None, "--size", "-s", help="Override image size"),
@@ -471,7 +471,7 @@ def _get_image_provider(provider_name: str, model: Optional[str] = None):
     """Get image provider instance by name.
     
     Args:
-        provider_name: Provider name (openai, google, gemini, gemini-pro)
+        provider_name: Provider name (openai, google, gemini, gemini-pro, imagen)
         model: Optional model name to override provider default
     
     Returns:
@@ -489,6 +489,9 @@ def _get_image_provider(provider_name: str, model: Optional[str] = None):
     elif provider_name == "gemini-pro":
         from .image_gen.gemini_pro import GeminiProImageProvider
         return GeminiProImageProvider(model_name=model) if model else GeminiProImageProvider()
+    elif provider_name == "imagen":
+        from .image_gen.imagen import ImagenImageProvider
+        return ImagenImageProvider(model_name=model) if model else ImagenImageProvider()
     else:
         typer.echo(f"[ERROR] Unknown provider: {provider_name}", err=True)
         raise typer.Exit(code=1)
