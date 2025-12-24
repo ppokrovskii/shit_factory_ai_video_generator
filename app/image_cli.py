@@ -42,6 +42,7 @@ def generate(
     prompt: Optional[str] = typer.Argument(None, help="Text prompt (if preset specified)"),
     output: Path = typer.Option("output.png", "--output", "-o", help="Output image path"),
     provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Override provider: gemini | gemini-pro | openai | google"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Override model name (e.g., gpt-image-1-mini, dall-e-3, gemini-2.5-flash-image)"),
     size: Optional[str] = typer.Option(None, "--size", "-s", help="Override image size (e.g., 1024x1024, 2K, 4K)"),
     seed: Optional[int] = typer.Option(None, "--seed", help="Random seed for reproducibility"),
     negative: Optional[str] = typer.Option(None, "--negative", "-n", help="Negative prompt (what to avoid)"),
@@ -52,14 +53,12 @@ def generate(
     Examples:
         # Using presets (recommended)
         image-cli generate fast "a cat"
-        image-cli generate "a cat"  # uses regular preset
+        image-cli generate "a cat"  # uses fast preset (default)
         image-cli generate ultra "a cat in 4K"
         
-        # Override preset with specific provider
-        image-cli generate ultra "a cat" --provider openai
-        
-        # Legacy: direct prompt (uses regular preset)
-        image-cli generate "a cat in a steampunk city"
+        # Override preset with specific provider and model
+        image-cli generate "a cat" --provider openai --model dall-e-3
+        image-cli generate "a cat" --provider openai --model gpt-image-1
         
         # With custom output path
         image-cli generate fast "a cat" --output my_cat.png
@@ -84,23 +83,26 @@ def generate(
         actual_prompt = prompt
     else:
         # First arg is the prompt, use default preset
-        preset_name = "regular"
+        preset_name = "fast"
         actual_prompt = preset_or_prompt
     
     # Resolve configuration: explicit flags override preset
+    resolved_model = None
     if provider:
         # Explicit provider overrides preset
         from .preset_config import get_default_model_for_provider
         resolved_provider = provider
+        resolved_model = model or get_default_model_for_provider(provider)
         resolved_size = size or "1024x1024"
-        logger.info("Using explicit provider: %s (overrides preset)", provider)
+        logger.info("Using explicit provider: %s, model: %s (overrides preset)", provider, resolved_model)
     else:
         # Load preset configuration
         try:
             preset_config = load_image_preset(preset_name)
             resolved_provider = preset_config.provider
+            resolved_model = model or preset_config.model
             resolved_size = size or preset_config.size
-            logger.info("Using preset: %s (provider=%s, size=%s)", preset_name, resolved_provider, resolved_size)
+            logger.info("Using preset: %s (provider=%s, model=%s, size=%s)", preset_name, resolved_provider, resolved_model, resolved_size)
         except ValueError as e:
             typer.echo(f"[ERROR] {e}", err=True)
             raise typer.Exit(code=1)
@@ -115,7 +117,7 @@ def generate(
     )
     
     # Select provider
-    provider_instance = _get_image_provider(resolved_provider)
+    provider_instance = _get_image_provider(resolved_provider, model=resolved_model)
     
     # Generate image
     logger.info("Generating image with prompt: %s", actual_prompt[:100])
@@ -143,7 +145,8 @@ def refine(
     prompt: str = typer.Argument(..., help="Refinement prompt (e.g., 'make it more colorful')"),
     output: Path = typer.Option("refined.png", "--output", "-o", help="Output image path"),
     provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Override provider: gemini | gemini-pro | openai | google"),
-    preset: str = typer.Option("regular", "--preset", help="Quality preset: fast | regular | ultra"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Override model name"),
+    preset: str = typer.Option("fast", "--preset", help="Quality preset: fast | regular | ultra"),
     size: Optional[str] = typer.Option(None, "--size", "-s", help="Override image size"),
     seed: Optional[int] = typer.Option(None, "--seed", help="Random seed"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed logs"),
@@ -183,16 +186,20 @@ def refine(
     from .preset_config import load_image_preset
     
     # Resolve configuration: explicit flags override preset
+    resolved_model = None
     if provider:
+        from .preset_config import get_default_model_for_provider
         resolved_provider = provider
+        resolved_model = model or get_default_model_for_provider(provider)
         resolved_size = size or "1024x1024"
-        logger.info("Using explicit provider: %s (overrides preset)", provider)
+        logger.info("Using explicit provider: %s, model: %s (overrides preset)", provider, resolved_model)
     else:
         try:
             preset_config = load_image_preset(preset)
             resolved_provider = preset_config.provider
+            resolved_model = model or preset_config.model
             resolved_size = size or preset_config.size
-            logger.info("Using preset: %s (provider=%s, size=%s)", preset, resolved_provider, resolved_size)
+            logger.info("Using preset: %s (provider=%s, model=%s, size=%s)", preset, resolved_provider, resolved_model, resolved_size)
         except ValueError as e:
             typer.echo(f"[ERROR] {e}", err=True)
             raise typer.Exit(code=1)
@@ -214,7 +221,7 @@ def refine(
         shutil.copy(input_path, temp_ref)
     
     # Select provider
-    provider_instance = _get_image_provider(resolved_provider)
+    provider_instance = _get_image_provider(resolved_provider, model=resolved_model)
     
     # Generate refined image
     logger.info("Refining image: %s with prompt: %s", input_path, prompt[:100])
@@ -460,20 +467,28 @@ def upscale(
         raise typer.Exit(code=1)
 
 
-def _get_image_provider(provider_name: str):
-    """Get image provider instance by name."""
+def _get_image_provider(provider_name: str, model: Optional[str] = None):
+    """Get image provider instance by name.
+    
+    Args:
+        provider_name: Provider name (openai, google, gemini, gemini-pro)
+        model: Optional model name to override provider default
+    
+    Returns:
+        Provider instance configured with the specified model
+    """
     if provider_name == "openai":
         from .image_gen.openai import OpenAIImageProvider
-        return OpenAIImageProvider()
+        return OpenAIImageProvider(model=model) if model else OpenAIImageProvider()
     elif provider_name == "google":
         from .image_gen.google import GoogleImageProvider
-        return GoogleImageProvider()
+        return GoogleImageProvider(model_name=model) if model else GoogleImageProvider()
     elif provider_name == "gemini":
         from .image_gen.gemini import GeminiImageProvider
-        return GeminiImageProvider()
+        return GeminiImageProvider(model_name=model) if model else GeminiImageProvider()
     elif provider_name == "gemini-pro":
         from .image_gen.gemini_pro import GeminiProImageProvider
-        return GeminiProImageProvider()
+        return GeminiProImageProvider(model_name=model) if model else GeminiProImageProvider()
     else:
         typer.echo(f"[ERROR] Unknown provider: {provider_name}", err=True)
         raise typer.Exit(code=1)

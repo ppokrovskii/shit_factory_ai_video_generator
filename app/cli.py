@@ -41,7 +41,8 @@ def main(
     limit: Optional[int] = typer.Option(None, "--limit", min=1, help="Generate only first N videos (for testing)"),
     # Image generation options
     img_provider: Optional[str] = typer.Option(None, "--img-provider", help="Override image provider: gemini | gemini-pro | google | openai"),
-    img_preset: str = typer.Option("regular", "--img-preset", help="Image quality preset: fast | regular | ultra"),
+    img_model: Optional[str] = typer.Option(None, "--img-model", help="Override image model (e.g., gpt-image-1-mini, dall-e-3)"),
+    img_preset: str = typer.Option("fast", "--img-preset", help="Image quality preset: fast | regular | ultra"),
     img_concurrency: int = typer.Option(2, "--img-concurrency", min=1, help="Max concurrent image generation groups"),
     img_out: Path = typer.Option(Path("./.src"), "--img-out", help="Output directory for generated images (default: same as --src)"),
     pair_source: str = typer.Option("prompts-only", "--pair-source", help="Video pair source: prompts-only | existing | all"),
@@ -72,20 +73,23 @@ def main(
     generated_images: list[Path] = []
     if img_gen:
         # Resolve image provider configuration: explicit --img-provider overrides preset
-        from .preset_config import load_image_preset
+        from .preset_config import load_image_preset, get_default_model_for_provider
         
+        resolved_img_model = None
         if img_provider:
             # Explicit provider overrides preset
             resolved_img_provider = img_provider
+            resolved_img_model = img_model or get_default_model_for_provider(img_provider)
             img_size = os.getenv("OPENAI_IMAGE_SIZE", "1024x1024")
-            logger.info("Using explicit image provider: %s (overrides preset)", img_provider)
+            logger.info("Using explicit image provider: %s, model: %s (overrides preset)", img_provider, resolved_img_model)
         else:
             # Use preset configuration
             try:
                 preset_config = load_image_preset(img_preset)
                 resolved_img_provider = preset_config.provider
+                resolved_img_model = img_model or preset_config.model
                 img_size = preset_config.size
-                logger.info("Using image preset: %s (provider=%s, size=%s)", img_preset, resolved_img_provider, img_size)
+                logger.info("Using image preset: %s (provider=%s, model=%s, size=%s)", img_preset, resolved_img_provider, resolved_img_model, img_size)
             except ValueError as e:
                 typer.echo(f"[ERROR] {e}", err=True)
                 raise typer.Exit(code=2)
@@ -104,16 +108,16 @@ def main(
             # choose provider (lazy import to avoid slow startup)
             if resolved_img_provider == "openai":
                 from .image_gen.openai import OpenAIImageProvider
-                iprov = OpenAIImageProvider()
+                iprov = OpenAIImageProvider(model=resolved_img_model) if resolved_img_model else OpenAIImageProvider()
             elif resolved_img_provider == "google":
                 from .image_gen.google import GoogleImageProvider
-                iprov = GoogleImageProvider()
+                iprov = GoogleImageProvider(model_name=resolved_img_model) if resolved_img_model else GoogleImageProvider()
             elif resolved_img_provider == "gemini":
                 from .image_gen.gemini import GeminiImageProvider
-                iprov = GeminiImageProvider()
+                iprov = GeminiImageProvider(model_name=resolved_img_model) if resolved_img_model else GeminiImageProvider()
             elif resolved_img_provider == "gemini-pro":
                 from .image_gen.gemini_pro import GeminiProImageProvider
-                iprov = GeminiProImageProvider()
+                iprov = GeminiProImageProvider(model_name=resolved_img_model) if resolved_img_model else GeminiProImageProvider()
             else:
                 typer.echo(f"Unknown image provider: {resolved_img_provider}", err=True)
                 raise typer.Exit(code=2)

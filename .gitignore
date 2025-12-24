@@ -61,6 +61,7 @@ htmlcov/
 # Project specific
 .out*/
 .src*/
+.temp/
 test_input.png
 test_output.png
 

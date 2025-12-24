@@ -10,9 +10,10 @@ from app.preset_config import (
 def test_load_video_preset_fast_default():
     """Test loading fast video preset with default values."""
     config = load_video_preset("fast")
-    assert config.provider == "mock"
-    assert config.quality == "low"
-    assert config.duration == 3.0
+    assert config.provider == "veo"
+    assert config.model == "veo-2.0-generate-001"
+    assert config.quality == "standard"
+    assert config.duration == 5.0
 
 
 @pytest.mark.unit
@@ -21,7 +22,7 @@ def test_load_video_preset_regular_default():
     config = load_video_preset("regular")
     assert config.provider == "veo"
     assert config.model == "veo-2.0-generate-001"
-    assert config.quality == "standard"
+    assert config.quality == "high"
     assert config.duration == 5.0
 
 
@@ -31,7 +32,7 @@ def test_load_video_preset_ultra_default():
     config = load_video_preset("ultra")
     assert config.provider == "veo"
     assert config.quality == "high"
-    assert config.duration == 8.0
+    assert config.duration == 10.0
 
 
 @pytest.mark.unit
@@ -72,7 +73,7 @@ def test_load_video_preset_partial_env_override(monkeypatch):
     
     config = load_video_preset("regular")
     assert config.provider == "veo"  # Default
-    assert config.quality == "standard"  # Default
+    assert config.quality == "high"  # Default
     assert config.duration == 7.0  # Overridden
 
 
@@ -82,7 +83,7 @@ def test_load_video_preset_invalid_duration_fallback(monkeypatch):
     monkeypatch.setenv("VIDEO_PRESET_FAST_DURATION", "not-a-number")
     
     config = load_video_preset("fast")
-    assert config.duration == 3.0  # Falls back to default
+    assert config.duration == 5.0  # Falls back to default
 
 
 @pytest.mark.unit

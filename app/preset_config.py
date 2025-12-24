@@ -47,29 +47,29 @@ _IMAGE_PRESET_DEFAULTS = {
     "ultra": ImagePresetConfig(
         provider="gemini-pro",
         model="gemini-3-pro-image-preview",
-        size="2K",
+        size="2048x2048",
     ),
 }
 
 # Default configurations for video presets
 _VIDEO_PRESET_DEFAULTS = {
     "fast": VideoPresetConfig(
-        provider="mock",
-        model=None,
-        quality="low",
-        duration=3.0,
+        provider="veo",
+        model="veo-2.0-generate-001",
+        quality="standard",
+        duration=5.0,
     ),
     "regular": VideoPresetConfig(
         provider="veo",
         model="veo-2.0-generate-001",
-        quality="standard",
+        quality="high",
         duration=5.0,
     ),
     "ultra": VideoPresetConfig(
         provider="veo",
         model="veo-2.0-generate-001",
         quality="high",
-        duration=8.0,
+        duration=10.0,
     ),
 }
 

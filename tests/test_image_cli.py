@@ -159,7 +159,11 @@ class TestGenerateCommand:
                 )
                 
                 assert result.exit_code == 0
-                mock_provider.assert_called_once_with(provider)
+                # Check that provider was called with model parameter
+                assert mock_provider.call_count == 1
+                call_args = mock_provider.call_args
+                assert call_args[0][0] == provider  # First positional arg is provider
+                assert 'model' in call_args[1]  # Model is passed as keyword arg
 
 
 class TestRefineCommand:
